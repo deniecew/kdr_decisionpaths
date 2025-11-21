@@ -17,9 +17,9 @@ data<-alldata %>%
   filter(service == "ON") %>%
   filter(date > cutoff_date) 
 
-npi_filter <- 1881011781
+npi_filter <- 1679869507
 outvar<-"O7"
-outvar_all<-c("MED7","O2","O3","O7","I69")
+outvar_all<-c("MED7","O2","O3","O7","I69", "SS54")
 
 provider_data <- data %>%
   filter(npi == npi_filter)
@@ -83,9 +83,48 @@ tmp4 <- tmp3 %>%
   ) %>%
   arrange(desc(priority_index)) %>%
   top_n(3,priority_index) %>%
-  select(varname)
+  pull(varname)  #use pull when you want to store as a vector instead of a column in a table
+
+tmp5<-tmp4 %>%
+  append('O7')
+
 
 ###Create Decision Paths for the Top 3 Key Drivers
+#path value is number of rows where KD and LTR are top box divided by number of rows where KD is topbox
 
-#Just testing to see if this git commit will work now that I added the path
+topbox_counts<- provider_data %>%
+  select(survey_id, varname, top_box) %>%
+  pivot_wider(names_from = varname, values_from = top_box) %>%
+  select(-survey_id) %>%
+  filter(if_all(all_of(tmp5), ~ !is.na(.))) %>%
+  count(across(all_of(tmp5))) %>%  #Use across() with all_of() for dynamic columns
+  mutate(proportion = n / sum(n))
 
+df1 <- topbox_counts %>%
+  group_by(across(all_of(tmp4[1])))%>%
+  summarise(
+    x_count = sum(n[O7 == 1]),
+    n_count = sum(n),
+    LTR = x_count / n_count
+  )
+
+df2 <- topbox_counts %>%
+  group_by(across(all_of(tmp4[1:2])))%>%
+  summarise(
+    x_count = sum(n[O7 == 1]),
+    n_count = sum(n),
+    LTR = x_count / n_count
+  )
+
+df3 <- topbox_counts %>%
+  group_by(across(all_of(tmp4)))%>%
+  summarise(
+    x_count = sum(n[O7 == 1]),
+    n_count = sum(n),
+    LTR = x_count / n_count
+  )
+
+final_path <-bind_rows(df1,df2,df3)
+
+final_path <- final_path %>%
+  select(all_of(tmp4),x_count, n_count, LTR)
